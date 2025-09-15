@@ -4,13 +4,13 @@
   "description": "Sistema de tarefas com gRPC e Protocol Buffers",
   "main": "server.js",
   "scripts": {
-    "start": "node lab02-servidor-grpc/server.js",
-    "dev": "nodemon lab02-servidor-grpc/server.js",
-    "client": "node lab02-servidor-grpc/client.js",
+    "start": "node server.js",
+    "dev": "nodemon server.js",
+    "client": "node client.js",
     "test": "jest --verbose",
     "test:watch": "jest --watch",
     "proto:compile": "grpc_tools_node_protoc --js_out=import_style=commonjs,binary:./generated --grpc_out=grpc_js:./generated --plugin=protoc-gen-grpc=`which grpc_tools_node_protoc_plugin` -I ./protos ./protos/*.proto",
-    "benchmark": "lab02-servidor-grpc/benchmark.js"
+    "benchmark": "benchmark.js"
   },
   "keywords": [
     "grpc",
