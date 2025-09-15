@@ -1,25 +1,32 @@
 {
   "name": "lab02-servidor-grpc",
   "version": "1.0.0",
-  "description": "**Laboratório de Desenvolvimento de Aplicações Móveis e Distribuídas**   **Curso de Engenharia de Software - PUC Minas**",
-  "main": "index.js",
+  "description": "Sistema de tarefas com gRPC e Protocol Buffers",
+  "main": "server.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "start": "node server.js",
+    "dev": "nodemon server.js",
+    "client": "node client.js",
+    "test": "jest --verbose",
+    "test:watch": "jest --watch",
+    "proto:compile": "grpc_tools_node_protoc --js_out=import_style=commonjs,binary:./generated --grpc_out=grpc_js:./generated --plugin=protoc-gen-grpc=`which grpc_tools_node_protoc_plugin` -I ./protos ./protos/*.proto",
+    "benchmark": "node benchmark.js"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
+  "keywords": ["grpc", "protocol-buffers", "sistemas-distribuidos", "streaming"],
+  "author": "Aluno PUC Minas",
+  "license": "MIT",
   "dependencies": {
-    "@grpc/grpc-js": "^1.13.4",
-    "@grpc/proto-loader": "^0.8.0",
-    "bcryptjs": "^3.0.2",
-    "jsonwebtoken": "^9.0.2",
-    "sqlite3": "^5.1.7",
-    "uuid": "^13.0.0"
+    "@grpc/grpc-js": "^1.9.0",
+    "@grpc/proto-loader": "^0.7.0",
+    "uuid": "^9.0.0",
+    "bcryptjs": "^2.4.3",
+    "jsonwebtoken": "^9.0.0",
+    "sqlite3": "^5.1.0"
   },
   "devDependencies": {
-    "@grpc/grpc-js-xds": "^1.13.0",
-    "grpc-tools": "^1.13.0",
-    "jest": "^30.1.3"
+    "grpc-tools": "^1.12.4",
+    "jest": "^29.0.0",
+    "nodemon": "^3.0.0",
+    "axios": "^1.4.0"
   }
 }
