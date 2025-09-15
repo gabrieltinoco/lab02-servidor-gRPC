@@ -1,0 +1,141 @@
+syntax = "proto3";
+
+package tasks;
+
+service TaskService {
+  rpc CreateTask(CreateTaskRequest) returns (CreateTaskResponse);
+  rpc GetTasks(GetTasksRequest) returns (GetTasksResponse);
+  rpc GetTask(GetTaskRequest) returns (GetTaskResponse);
+  rpc UpdateTask(UpdateTaskRequest) returns (UpdateTaskResponse);
+  rpc DeleteTask(DeleteTaskRequest) returns (DeleteTaskResponse);
+  rpc GetTaskStats(GetTaskStatsRequest) returns (GetTaskStatsResponse);
+  
+  // Streaming endpoints
+  rpc StreamTasks(StreamTasksRequest) returns (stream Task);
+  rpc StreamNotifications(StreamNotificationsRequest) returns (stream TaskNotification);
+}
+
+enum Priority {
+  LOW = 0;
+  MEDIUM = 1;
+  HIGH = 2;
+  URGENT = 3;
+}
+
+enum NotificationType {
+  TASK_CREATED = 0;
+  TASK_UPDATED = 1;
+  TASK_DELETED = 2;
+  TASK_COMPLETED = 3;
+}
+
+message Task {
+  string id = 1;
+  string title = 2;
+  string description = 3;
+  bool completed = 4;
+  Priority priority = 5;
+  string user_id = 6;
+  int64 created_at = 7;
+  int64 updated_at = 8;
+}
+
+message CreateTaskRequest {
+  string token = 1;
+  string title = 2;
+  string description = 3;
+  Priority priority = 4;
+}
+
+message GetTasksRequest {
+  string token = 1;
+  optional bool completed = 2;
+  optional Priority priority = 3;
+  int32 page = 4;
+  int32 limit = 5;
+}
+
+message GetTaskRequest {
+  string token = 1;
+  string task_id = 2;
+}
+
+message UpdateTaskRequest {
+  string token = 1;
+  string task_id = 2;
+  optional string title = 3;
+  optional string description = 4;
+  optional bool completed = 5;
+  optional Priority priority = 6;
+}
+
+message DeleteTaskRequest {
+  string token = 1;
+  string task_id = 2;
+}
+
+message StreamTasksRequest {
+  string token = 1;
+  optional bool completed = 2;
+}
+
+message StreamNotificationsRequest {
+  string token = 1;
+}
+
+message GetTaskStatsRequest {
+  string token = 1;
+}
+
+message CreateTaskResponse {
+  bool success = 1;
+  string message = 2;
+  Task task = 3;
+  repeated string errors = 4;
+}
+
+message GetTasksResponse {
+  bool success = 1;
+  repeated Task tasks = 2;
+  int32 total = 3;
+  int32 page = 4;
+  int32 limit = 5;
+  string message = 6;
+}
+
+message GetTaskResponse {
+  bool success = 1;
+  string message = 2;
+  Task task = 3;
+}
+
+message UpdateTaskResponse {
+  bool success = 1;
+  string message = 2;
+  Task task = 3;
+  repeated string errors = 4;
+}
+
+message DeleteTaskResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+message TaskStats {
+  int32 total = 1;
+  int32 completed = 2;
+  int32 pending = 3;
+  double completion_rate = 4;
+}
+
+message GetTaskStatsResponse {
+  bool success = 1;
+  TaskStats stats = 2;
+}
+
+message TaskNotification {
+  NotificationType type = 1;
+  Task task = 2;
+  string message = 3;
+  int64 timestamp = 4;
+}
