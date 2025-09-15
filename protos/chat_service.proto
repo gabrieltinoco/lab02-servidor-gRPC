@@ -1,0 +1,15 @@
+syntax = "proto3";
+package chat;
+
+service ChatService {
+  // Bidirectional streaming: cada ChatMessage pode ser enviada por cliente ou servidor
+  rpc Chat(stream ChatMessage) returns (stream ChatMessage);
+}
+
+message ChatMessage {
+  string id = 1;           // id da mensagem (uuid)
+  string user_id = 2;      // id do usuário remetente
+  string username = 3;     // username legível
+  string text = 4;         // conteúdo
+  int64 timestamp = 5;     // unix seconds
+}

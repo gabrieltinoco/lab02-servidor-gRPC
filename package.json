@@ -4,29 +4,34 @@
   "description": "Sistema de tarefas com gRPC e Protocol Buffers",
   "main": "server.js",
   "scripts": {
-    "start": "node lab02-servidor-grpc/server.js",
+    "start": "node server.js",
     "dev": "nodemon server.js",
-    "client": "node lab02-servidor-grpc/client.js",
+    "client": "node client.js",
     "test": "jest --verbose",
     "test:watch": "jest --watch",
     "proto:compile": "grpc_tools_node_protoc --js_out=import_style=commonjs,binary:./generated --grpc_out=grpc_js:./generated --plugin=protoc-gen-grpc=`which grpc_tools_node_protoc_plugin` -I ./protos ./protos/*.proto",
-    "benchmark": "node lab02-servidor-grpc/benchmark.js"
+    "benchmark": "benchmark.js"
   },
-  "keywords": ["grpc", "protocol-buffers", "sistemas-distribuidos", "streaming"],
+  "keywords": [
+    "grpc",
+    "protocol-buffers",
+    "sistemas-distribuidos",
+    "streaming"
+  ],
   "author": "Gabriel Lucas",
   "license": "MIT",
   "dependencies": {
-    "@grpc/grpc-js": "^1.9.0",
-    "@grpc/proto-loader": "^0.7.0",
-    "uuid": "^9.0.0",
+    "@grpc/grpc-js": "^1.13.4",
+    "@grpc/proto-loader": "^0.7.15",
     "bcryptjs": "^2.4.3",
-    "jsonwebtoken": "^9.0.0",
-    "sqlite3": "^5.1.0"
+    "jsonwebtoken": "^9.0.2",
+    "sqlite3": "^5.1.0",
+    "uuid": "^9.0.0"
   },
   "devDependencies": {
+    "axios": "^1.4.0",
     "grpc-tools": "^1.12.4",
     "jest": "^29.0.0",
-    "nodemon": "^3.0.0",
-    "axios": "^1.4.0"
+    "nodemon": "^3.0.0"
   }
 }

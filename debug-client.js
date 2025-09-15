@@ -234,4 +234,27 @@ if (require.main === module) {
     runDebugSession();
 }
 
+if (require.main === module) {
+    (async () => {
+        const client = new GrpcClient('localhost:50051', { roundRobin: false });
+        await client.initialize();
+
+        // registrar/login e setToken...
+        const reg = await client.register({ /* ... */ });
+        await client.login({ /* ... */ });
+        client.setToken(reg.token || client.currentToken);
+
+        const chat = client.startChat((msg) => {
+            console.log('NEW CHAT MSG:', msg.username, msg.text, new Date(msg.timestamp * 1000).toISOString());
+        });
+
+        chat.write('Olá do debug-client!');
+        // depois de alguns segundos:
+        setTimeout(() => {
+            chat.write('Encerrando chat');
+            chat.end();
+        }, 5000);
+    })();
+}
+
 module.exports = DebugGrpcClient;
