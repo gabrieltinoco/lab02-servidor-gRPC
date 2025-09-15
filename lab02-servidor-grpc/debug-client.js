@@ -151,14 +151,11 @@ class DebugGrpcClient extends GrpcClient {
             Object.entries(methodStats).forEach(([method, stats]) => {
                 const avgTime = stats.totalTime / stats.count;
                 const successRate = ((stats.count - stats.errors) / stats.count * 100);
-            Object.entries(methodStats).forEach(([method, stats]) => {
-                const avgTime = stats.totalTime / stats.count;
-                const successRate = ((stats.count - stats.errors) / stats.count * 100);
                 console.log(`  ${method}: ${stats.count} calls, ${avgTime.toFixed(2)}ms avg, ${successRate.toFixed(1)}% success`);
             });
         }
     }
-}
+} // <-- fecha a classe DebugGrpcClient
 
 // Script de debug interativo
 async function runDebugSession() {
