@@ -9,25 +9,68 @@ const ProtoLoader = require('./utils/protoLoader');
  */
 
 class GrpcClient {
-    constructor(serverAddress = 'localhost:50051') {
+    constructor(serverAddress = 'localhost:50051', options = {}) {
         this.serverAddress = serverAddress;
         this.protoLoader = new ProtoLoader();
         this.authClient = null;
         this.taskClient = null;
+        this.chatClient = null;
         this.currentToken = null;
+        this.options = options; // { roundRobin: true, addresses: ['host1:50051','host2:50051'] }
+    }
+
+    createAuthInterceptor() {
+        const self = this;
+        // client-side interceptor to inject metadata
+        return (options, nextCall) => {
+            const requester = {
+                start: (metadata, listener, next) => {
+                    // adicionar Authorization
+                    if (self.currentToken) {
+                        metadata.add('authorization', `Bearer ${self.currentToken}`);
+                    }
+                    next(metadata, listener);
+                }
+            };
+            return new grpc.InterceptingCall(nextCall(options), requester);
+        };
     }
 
     async initialize() {
         try {
-            // Carregar protobuf
             const authProto = this.protoLoader.loadProto('auth_service.proto', 'auth');
             const taskProto = this.protoLoader.loadProto('task_service.proto', 'tasks');
+            const chatProto = this.protoLoader.loadProto('chat_service.proto', 'chat');
 
-            // Criar clientes
             const credentials = grpc.credentials.createInsecure();
-            
-            this.authClient = new authProto.AuthService(this.serverAddress, credentials);
-            this.taskClient = new taskProto.TaskService(this.serverAddress, credentials);
+
+            // Channel options (round_robin)
+            const channelOptions = {};
+            if (this.options.roundRobin) {
+                channelOptions['grpc.service_config'] = JSON.stringify({
+                    loadBalancingConfig: [{ round_robin: {} }]
+                });
+            }
+
+            // If the user passed an array of addresses, use target string "dns:///<name>" or pick first
+            let target = this.serverAddress;
+            if (Array.isArray(this.options.addresses) && this.options.addresses.length > 0) {
+                // create a target with multiple addresses via 'ipv4:...' isn't directly available;
+                // simplest: if you run multiple backends behind DNS that returns multiple A records,
+                // set serverAddress to the DNS name and enable round_robin above.
+                target = this.options.addresses[0];
+            }
+
+            // cria clients com interceptors (injetar token)
+            const interceptorProviders = [this.createAuthInterceptor()];
+            const callOptions = { 'grpc.default_authority': undefined, ...channelOptions };
+
+            this.authClient = new authProto.AuthService(target, credentials, callOptions);
+            this.taskClient = new taskProto.TaskService(target, credentials, callOptions);
+            this.chatClient = new chatProto.ChatService(target, credentials, callOptions);
+
+            // NOTE: @grpc/grpc-js interceptors are provided per-call via InterceptingCall wrapper above.
+            // We'll use metadata injection interceptor created earlier when using client directly in promisify.
 
             console.log('✅ Cliente gRPC inicializado');
         } catch (error) {
@@ -38,17 +81,50 @@ class GrpcClient {
 
     // Promisificar chamadas gRPC
     promisify(client, method) {
+        const self = this;
         return (request) => {
             return new Promise((resolve, reject) => {
-                client[method](request, (error, response) => {
-                    if (error) {
-                        reject(error);
-                    } else {
-                        resolve(response);
-                    }
+                const metadata = new grpc.Metadata();
+                if (self.currentToken) metadata.add('authorization', `Bearer ${self.currentToken}`);
+
+                client[method](request, metadata, (error, response) => {
+                    if (error) reject(error);
+                    else resolve(response);
                 });
             });
         };
+    }
+
+    startChat(onMessage) {
+        const metadata = new grpc.Metadata();
+        if (this.currentToken) metadata.add('authorization', `Bearer ${this.currentToken}`);
+
+        const stream = this.chatClient.Chat(metadata);
+
+        stream.on('data', (msg) => {
+            if (onMessage) onMessage(msg);
+        });
+
+        stream.on('end', () => console.log('Chat stream ended'));
+        stream.on('error', (err) => console.error('Chat stream error', err));
+        stream.on('status', (status) => console.log('Chat stream status', status));
+
+        return {
+            write: (text) => {
+                const msg = {
+                    id: undefined,
+                    text,
+                    timestamp: Math.floor(Date.now() / 1000)
+                };
+                stream.write(msg);
+            },
+            raw: stream,
+            end: () => stream.end()
+        };
+    }
+
+    setToken(token) {
+        this.currentToken = token;
     }
 
     async register(userData) {
@@ -59,21 +135,19 @@ class GrpcClient {
     async login(credentials) {
         const loginPromise = this.promisify(this.authClient, 'Login');
         const response = await loginPromise(credentials);
-        
+
         if (response.success) {
             this.currentToken = response.token;
             console.log('🔑 Token obtido com sucesso');
         }
-        
+
         return response;
     }
 
     async createTask(taskData) {
         const createPromise = this.promisify(this.taskClient, 'CreateTask');
-        return await createPromise({
-            token: this.currentToken,
-            ...taskData
-        });
+        // O token já é enviado nos metadados pela função promisify
+        return await createPromise(taskData);
     }
 
     async getTasks(filters = {}) {
@@ -172,7 +246,7 @@ class GrpcClient {
 // Demonstração de uso
 async function demonstrateGrpcClient() {
     const client = new GrpcClient();
-    
+
     try {
         await client.initialize();
 
@@ -233,7 +307,7 @@ async function demonstrateGrpcClient() {
         // 7. Demonstrar streaming (comentado para evitar loop infinito)
         // console.log('\n7. Iniciando stream de notificações...');
         // const notificationStream = client.streamNotifications();
-        
+
         // Manter stream aberto por alguns segundos
         // setTimeout(() => notificationStream.cancel(), 5000);
 

@@ -2,19 +2,10 @@ const grpc = require('@grpc/grpc-js');
 const ProtoLoader = require('./utils/protoLoader');
 const AuthService = require('./services/AuthService');
 const TaskService = require('./services/TaskService');
+const ChatService = require('./services/ChatService'); // novo
 const database = require('./database/database');
-
-/**
- * Servidor gRPC
- * 
- * Implementa comunicação de alta performance usando:
- * - Protocol Buffers para serialização eficiente
- * - HTTP/2 como protocolo de transporte
- * - Streaming bidirecional para tempo real
- * 
- * Segundo Google (2023), gRPC oferece até 60% melhor performance
- * comparado a REST/JSON em cenários de alta carga
- */
+const { serverAuthInterceptor } = require('./middleware/auth');
+const { toGrpcError } = require('./utils/grpcErrors');
 
 class GrpcServer {
     constructor() {
@@ -22,34 +13,72 @@ class GrpcServer {
         this.protoLoader = new ProtoLoader();
         this.authService = new AuthService();
         this.taskService = new TaskService();
+        this.chatService = new ChatService();
+    }
+
+    // helper para aplicar interceptors (simples)
+    wrapHandlerWithInterceptor(handler, interceptors = []) {
+        // handler: function(call, callback) OR function(call) for streams
+        return (call, callback) => {
+            // executar interceptors em cadeia
+            let idx = 0;
+            const next = () => {
+                if (idx >= interceptors.length) {
+                    // chamar handler
+                    try {
+                        return handler.call(this, call, callback);
+                    } catch (error) {
+                        const gErr = toGrpcError(error);
+                        if (callback) return callback(gErr);
+                        try { call.destroy(gErr); } catch (e) {}
+                    }
+                } else {
+                    const interceptor = interceptors[idx++];
+                    try {
+                        // interceptors podem ser sync ou retornar next(call)
+                        interceptor(call, null, (c, cb) => next(c, cb));
+                    } catch (err) {
+                        const gErr = toGrpcError(err);
+                        if (callback) return callback(gErr);
+                        try { call.destroy(gErr); } catch (e) {}
+                    }
+                }
+            };
+            next();
+        };
     }
 
     async initialize() {
         try {
-            // Inicializar banco de dados
             await database.init();
 
-            // Carregar definições dos protobuf
             const authProto = this.protoLoader.loadProto('auth_service.proto', 'auth');
             const taskProto = this.protoLoader.loadProto('task_service.proto', 'tasks');
+            const chatProto = this.protoLoader.loadProto('chat_service.proto', 'chat'); // novo
 
-            // Registrar serviços de autenticação
+            // registrar AuthService (permitir endpoints públicos sem metadata)
             this.server.addService(authProto.AuthService.service, {
-                Register: this.authService.register.bind(this.authService),
-                Login: this.authService.login.bind(this.authService),
-                ValidateToken: this.authService.validateToken.bind(this.authService)
+                Register: this.wrapHandlerWithInterceptor(this.authService.register.bind(this.authService), []),
+                Login: this.wrapHandlerWithInterceptor(this.authService.login.bind(this.authService), []),
+                ValidateToken: this.wrapHandlerWithInterceptor(this.authService.validateToken.bind(this.authService), [])
             });
 
-            // Registrar serviços de tarefas
+            // registrar TaskService com interceptor de auth
+            const authInterceptor = serverAuthInterceptor({ skipMethods: ['/auth.AuthService/Register', '/auth.AuthService/Login'] });
             this.server.addService(taskProto.TaskService.service, {
-                CreateTask: this.taskService.createTask.bind(this.taskService),
-                GetTasks: this.taskService.getTasks.bind(this.taskService),
-                GetTask: this.taskService.getTask.bind(this.taskService),
-                UpdateTask: this.taskService.updateTask.bind(this.taskService),
-                DeleteTask: this.taskService.deleteTask.bind(this.taskService),
-                GetTaskStats: this.taskService.getTaskStats.bind(this.taskService),
-                StreamTasks: this.taskService.streamTasks.bind(this.taskService),
-                StreamNotifications: this.taskService.streamNotifications.bind(this.taskService)
+                CreateTask: this.wrapHandlerWithInterceptor(this.taskService.createTask.bind(this.taskService), [authInterceptor]),
+                GetTasks: this.wrapHandlerWithInterceptor(this.taskService.getTasks.bind(this.taskService), [authInterceptor]),
+                GetTask: this.wrapHandlerWithInterceptor(this.taskService.getTask.bind(this.taskService), [authInterceptor]),
+                UpdateTask: this.wrapHandlerWithInterceptor(this.taskService.updateTask.bind(this.taskService), [authInterceptor]),
+                DeleteTask: this.wrapHandlerWithInterceptor(this.taskService.deleteTask.bind(this.taskService), [authInterceptor]),
+                GetTaskStats: this.wrapHandlerWithInterceptor(this.taskService.getTaskStats.bind(this.taskService), [authInterceptor]),
+                StreamTasks: this.wrapHandlerWithInterceptor(this.taskService.streamTasks.bind(this.taskService), [authInterceptor]),
+                StreamNotifications: this.wrapHandlerWithInterceptor(this.taskService.streamNotifications.bind(this.taskService), [authInterceptor])
+            });
+
+            // registrar ChatService (bidirectional streaming) com auth
+            this.server.addService(chatProto.ChatService.service, {
+                Chat: this.wrapHandlerWithInterceptor(this.chatService.chat.bind(this.chatService), [authInterceptor])
             });
 
             console.log('✅ Serviços gRPC registrados com sucesso');

@@ -26,12 +26,22 @@ class TaskService {
      * Criar tarefa
      */
     async createTask(call, callback) {
-        try {
-            const { token, title, description, priority } = call.request;
-            
-            // Validar token
-            const user = await this.validateToken(token);
-            
+        try { // <-- O try começa aqui
+            // 1. Validação do Token
+            const tokenFromRequest = call.request?.token;
+            // O user pode vir de um interceptor (call.user) ou do token na requisição
+            const userPayload = call.user || (tokenFromRequest ? await this.validateToken(tokenFromRequest) : null);
+
+            if (!userPayload) {
+                // Lança um erro para ser pego pelo catch logo abaixo
+                const authError = new Error('Token inválido');
+                authError.code = grpc.status.UNAUTHENTICATED;
+                throw authError;
+            }
+
+            // 2. Validação dos Dados da Tarefa
+            const { title, description, priority } = call.request;
+
             if (!title?.trim()) {
                 return callback(null, {
                     success: false,
@@ -40,12 +50,14 @@ class TaskService {
                 });
             }
 
+            // 3. Criação e Inserção no Banco
             const taskData = {
                 id: uuidv4(),
                 title: title.trim(),
                 description: description || '',
+                // Esta conversão também é mais segura dentro do try
                 priority: ProtoLoader.convertFromPriority(priority),
-                userId: user.id,
+                userId: userPayload.id,
                 completed: false
             };
 
@@ -65,7 +77,7 @@ class TaskService {
                 [task.id, task.title, task.description, task.priority, task.userId]
             );
 
-            // Notificar streams ativos
+            // 4. Notificar e Retornar Sucesso
             this.notifyStreams('TASK_CREATED', task);
 
             callback(null, {
@@ -73,21 +85,26 @@ class TaskService {
                 message: 'Tarefa criada com sucesso',
                 task: task.toProtobuf()
             });
-        } catch (error) {
+
+        } catch (error) { // <-- O catch agora pega QUALQUER erro
             console.error('Erro ao criar tarefa:', error);
             const grpcError = new Error(error.message || 'Erro interno do servidor');
-            grpcError.code = error.message === 'Token inválido' ? grpc.status.UNAUTHENTICATED : grpc.status.INTERNAL;
+            grpcError.code = error.code || grpc.status.INTERNAL;
             callback(grpcError);
         }
     }
-
     /**
      * Listar tarefas com paginação
      */
     async getTasks(call, callback) {
         try {
-            const { token, completed, priority, page, limit } = call.request;
-            const user = await this.validateToken(token);
+            const tokenFromRequest = call.request?.token;
+            const userPayload = call.user || (tokenFromRequest ? await this.validateToken(tokenFromRequest) : null);
+            if (!userPayload) {
+                const grpcError = new Error('Token inválido');
+                grpcError.code = grpc.status.UNAUTHENTICATED;
+                return callback(grpcError);
+            }
 
             let sql = 'SELECT * FROM tasks WHERE userId = ?';
             const params = [user.id];
@@ -110,7 +127,7 @@ class TaskService {
 
             const result = await database.getAllWithPagination(sql, params, pageNum, limitNum);
             const tasks = result.rows.map(row => {
-                const task = new Task({...row, completed: row.completed === 1});
+                const task = new Task({ ...row, completed: row.completed === 1 });
                 return task.toProtobuf();
             });
 
@@ -134,8 +151,13 @@ class TaskService {
      */
     async getTask(call, callback) {
         try {
-            const { token, task_id } = call.request;
-            const user = await this.validateToken(token);
+            const tokenFromRequest = call.request?.token;
+            const userPayload = call.user || (tokenFromRequest ? await this.validateToken(tokenFromRequest) : null);
+            if (!userPayload) {
+                const grpcError = new Error('Token inválido');
+                grpcError.code = grpc.status.UNAUTHENTICATED;
+                return callback(grpcError);
+            }
 
             const row = await database.get(
                 'SELECT * FROM tasks WHERE id = ? AND userId = ?',
@@ -149,8 +171,8 @@ class TaskService {
                 });
             }
 
-            const task = new Task({...row, completed: row.completed === 1});
-            
+            const task = new Task({ ...row, completed: row.completed === 1 });
+
             callback(null, {
                 success: true,
                 message: 'Tarefa encontrada',
@@ -169,8 +191,13 @@ class TaskService {
      */
     async updateTask(call, callback) {
         try {
-            const { token, task_id, title, description, completed, priority } = call.request;
-            const user = await this.validateToken(token);
+            const tokenFromRequest = call.request?.token;
+            const userPayload = call.user || (tokenFromRequest ? await this.validateToken(tokenFromRequest) : null);
+            if (!userPayload) {
+                const grpcError = new Error('Token inválido');
+                grpcError.code = grpc.status.UNAUTHENTICATED;
+                return callback(grpcError);
+            }
 
             // Verificar se a tarefa existe
             const existingTask = await database.get(
@@ -211,8 +238,8 @@ class TaskService {
                 [task_id, user.id]
             );
 
-            const task = new Task({...updatedRow, completed: updatedRow.completed === 1});
-            
+            const task = new Task({ ...updatedRow, completed: updatedRow.completed === 1 });
+
             // Notificar streams ativos
             this.notifyStreams('TASK_UPDATED', task);
 
@@ -234,8 +261,13 @@ class TaskService {
      */
     async deleteTask(call, callback) {
         try {
-            const { token, task_id } = call.request;
-            const user = await this.validateToken(token);
+            const tokenFromRequest = call.request?.token;
+            const userPayload = call.user || (tokenFromRequest ? await this.validateToken(tokenFromRequest) : null);
+            if (!userPayload) {
+                const grpcError = new Error('Token inválido');
+                grpcError.code = grpc.status.UNAUTHENTICATED;
+                return callback(grpcError);
+            }
 
             // Buscar tarefa antes de deletar (para notificações)
             const existingTask = await database.get(
@@ -262,8 +294,8 @@ class TaskService {
                 });
             }
 
-            const task = new Task({...existingTask, completed: existingTask.completed === 1});
-            
+            const task = new Task({ ...existingTask, completed: existingTask.completed === 1 });
+
             // Notificar streams ativos
             this.notifyStreams('TASK_DELETED', task);
 
@@ -284,8 +316,13 @@ class TaskService {
      */
     async getTaskStats(call, callback) {
         try {
-            const { token } = call.request;
-            const user = await this.validateToken(token);
+            const tokenFromRequest = call.request?.token;
+            const userPayload = call.user || (tokenFromRequest ? await this.validateToken(tokenFromRequest) : null);
+            if (!userPayload) {
+                const grpcError = new Error('Token inválido');
+                grpcError.code = grpc.status.UNAUTHENTICATED;
+                return callback(grpcError);
+            }
 
             const stats = await database.get(`
                 SELECT 
@@ -322,8 +359,13 @@ class TaskService {
      */
     async streamTasks(call) {
         try {
-            const { token, completed } = call.request;
-            const user = await this.validateToken(token);
+            const tokenFromRequest = call.request?.token;
+            const userPayload = call.user || (tokenFromRequest ? await this.validateToken(tokenFromRequest) : null);
+            if (!userPayload) {
+                const grpcError = new Error('Token inválido');
+                grpcError.code = grpc.status.UNAUTHENTICATED;
+                return callback(grpcError);
+            }
 
             let sql = 'SELECT * FROM tasks WHERE userId = ?';
             const params = [user.id];
@@ -339,9 +381,9 @@ class TaskService {
 
             // Enviar tarefas existentes
             for (const row of rows) {
-                const task = new Task({...row, completed: row.completed === 1});
+                const task = new Task({ ...row, completed: row.completed === 1 });
                 call.write(task.toProtobuf());
-                
+
                 // Simular delay para demonstrar streaming
                 await new Promise(resolve => setTimeout(resolve, 100));
             }
@@ -372,11 +414,16 @@ class TaskService {
      */
     async streamNotifications(call) {
         try {
-            const { token } = call.request;
-            const user = await this.validateToken(token);
+            const tokenFromRequest = call.request?.token;
+            const userPayload = call.user || (tokenFromRequest ? await this.validateToken(tokenFromRequest) : null);
+            if (!userPayload) {
+                const grpcError = new Error('Token inválido');
+                grpcError.code = grpc.status.UNAUTHENTICATED;
+                return callback(grpcError);
+            }
 
             const sessionId = uuidv4();
-            
+
             this.streamingSessions.set(sessionId, {
                 call,
                 userId: user.id,
