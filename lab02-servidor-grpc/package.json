@@ -13,7 +13,7 @@
     "benchmark": "node benchmark.js"
   },
   "keywords": ["grpc", "protocol-buffers", "sistemas-distribuidos", "streaming"],
-  "author": "Aluno PUC Minas",
+  "author": "Gabriel Lucas",
   "license": "MIT",
   "dependencies": {
     "@grpc/grpc-js": "^1.9.0",
